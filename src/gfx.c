@@ -98,16 +98,25 @@ static void drawTextureFragment(uint8_t* row, int x1, int x2, int lu, int lv, in
     if (x2 < 0 || x1 >= LCD_COLUMNS<<16)
         return;
 
-    float frac = 1.0f - ((x1 & 0xffff) / (float)0xffff);
+    if (x1 > x2)
+        return;
+
+    float frac = (x1 / (float)(1<<16));
+    float dx = (x2 / (float)(1 << 16)) - frac;
+    frac = ((int)frac) - frac;
     // convert to screen units
     x1 >>= 16;
     x2 >>= 16;
-    int dx = x2 - x1;
-    if (dx == 0) return;
+
+    if (x2 > LCD_COLUMNS)
+        x2 = LCD_COLUMNS;
+
+    // int dx = x2 - x1;
+    if (x2-x1 == 0) return;
     // uvw source is fixed point already
-    int du = (ru - lu) / dx;
-    int dv = (rv - lv) / dx;
-    int dw = (rw - lw) / dx;
+    const int du = (ru - lu) / dx;
+    const int dv = (rv - lv) / dx;
+    const int dw = (rw - lw) / dx;
     
     if (x1 < 0) {
         lu -= x1 * du;
@@ -121,14 +130,7 @@ static void drawTextureFragment(uint8_t* row, int x1, int x2, int lu, int lv, in
     lv += (int)(frac * dv);
     lw += (int)(frac * dw);
     
-    if (x2 > LCD_COLUMNS)
-        x2 = LCD_COLUMNS;
-
-    if (x1 > x2)
-        return;
-
     // Operate on 8 bits at a time
-
     const int startbit = x1 & 7;
     const uint8_t startmask = (1 << (8 - startbit)) - 1;
     const int endbit = x2 & 7;
@@ -342,5 +344,6 @@ void texfill(const Point3duv* verts, const int n, uint8_t* texture, uint8_t* bit
             rv = __TOFIXED16(v0) + (int)(cy * rdv);
         }
         drawTextureFragment(bitmap, lx, rx, lu, lv, lw, ru, rv, rw, texture);
+        // drawFragment((uint32_t*)bitmap, lx >> 16, rx >> 16, 0x0);
     }
 }

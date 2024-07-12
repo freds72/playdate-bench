@@ -93,12 +93,12 @@ static Point3d cube_verts[8] = {
 };
 
 static ThreedFace cube_faces[6]={
-	{.vi = {0,3,2,1}, .uv = { {.u = 0, .v = 0 }, {.u = 0, .v = 31.9f},{.u = 31.9f, .v = 31.9f }, {.u = 31.9f, .v = 0 } }},
-	{.vi = {0,1,5,4}, .uv = { {.u = 0, .v = 0 }, {.u = 31.9f,.v = 0}, {.u = 31.9f, .v = 31.9f }, {.u = 0,  .v = 31.9f} }},
-	{.vi = {1,2,6,5}, .uv = { {.u = 0, .v = 0 }, {.u = 31.9f,.v = 0}, {.u = 31.9f, .v = 31.9f }, {.u = 0,  .v = 31.9f} }},
-	{.vi = {2,3,7,6}, .uv = { {.u = 0, .v = 0 }, {.u = 31.9f,.v = 0}, {.u = 31.9f, .v = 31.9f }, {.u = 0,  .v = 31.9f} }},
-	{.vi = {3,0,4,7}, .uv = { {.u = 31.9f,.v =0 },{.u = 0, .v = 0}, {.u = 0,  .v = 31.9f }, {.u = 31.9f, .v = 31.9f} }},
-	{.vi = {4,5,6,7}, .uv=  { {.u = 0, .v = 0},  {.u = 31.9f,.v = 0}, {.u = 31.9f, .v = 31.9f }, {.u = 0, .v = 31.9f} }}
+	{.vi = {0,3,2,1}, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 0.1f, .v = 31.9f},{.u = 31.9f, .v = 31.9f }, {.u = 31.9f, .v = 0.1f } }},
+	{.vi = {0,1,5,4}, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 31.9f,.v = 0.1f}, {.u = 31.9f, .v = 31.9f }, {.u = 0.1f,  .v = 31.9f} }},
+	{.vi = {1,2,6,5}, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 31.9f,.v = 0.1f}, {.u = 31.9f, .v = 31.9f }, {.u = 0.1f,  .v = 31.9f} }},
+	{.vi = {2,3,7,6}, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 31.9f,.v = 0.1f}, {.u = 31.9f, .v = 31.9f }, {.u = 0.1f,  .v = 31.9f} }},
+	{.vi = {3,0,4,7}, .uv = { {.u = 31.9f,.v =0.1f },{.u = 0.1f, .v = 0.1f}, {.u = 0.1f,  .v = 31.9f }, {.u = 31.9f, .v = 31.9f} }},
+	{.vi = {4,5,6,7}, .uv=  { {.u = 0.1f, .v = 0.1f},  {.u = 31.9f,.v = 0.1f}, {.u = 31.9f, .v = 31.9f }, {.u = 0.1f, .v = 31.9f} }}
 };
 
 static const ThreedModel cube = {
@@ -151,15 +151,14 @@ static void draw_face(Drawable* drawable, uint8_t* bitmap) {
   	//polyfill(pts, n, _ordered_dithers + (int)(face->material * (1.f - shading)) * 32, (uint32_t*)bitmap);
 	texfill(pts, n, face->texture, bitmap);
 
-    // don't "pop" edges if too far away
-		Point3duv* p0 = &pts[n - 1];
-		for (int i = 0; i < n; ++i) {
-				Point3duv* p1 = &pts[i];
-				if (p0->u) {
-						pd->graphics->drawLine((int)p0->x, (int)p0->y, (int)p1->x, (int)p1->y, 1, kColorBlack);
-				}
-				p0 = p1;
-		}
+    Point3duv* p0 = &pts[n - 1];
+	for (int i = 0; i < n; ++i) {
+			Point3duv* p1 = &pts[i];
+			if (p0->u) {
+					pd->graphics->drawLine((int)p0->x, (int)p0->y, (int)p1->x, (int)p1->y, 1, kColorBlack);
+			}
+			p0 = p1;
+	}
 }
 
 static void push_threeD_model(ThreedModel* model, const Point3d cv, const Mat4 m) {
