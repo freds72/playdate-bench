@@ -38,7 +38,7 @@ typedef struct {
 } Point2d;
 
 
-// 3d point with u coordinate
+// 3d point with uv coordinate
 typedef struct {
     union {
         struct Point3d p;
@@ -48,11 +48,16 @@ typedef struct {
             float z;
         };
         // values array
-        float v[VEC3];
+        float pos[VEC3];
     };
-    float u;
-    float light;
-} Point3du;
+    union {
+        struct {
+            float u;
+            float v;
+        };
+        float uv[2];
+    };
+} Point3duv;
 
 // range helpers
 typedef struct {

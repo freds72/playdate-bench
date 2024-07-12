@@ -7,14 +7,14 @@
 #define MAX_DRAWABLES 2048
 
 typedef struct {
-    // texture type
-    int material;
     // original flags
     int flags;
     // number of points
     int n;
+    // texture
+    uint8_t* texture;
     // clipped points in camera space
-    Point3du pts[5];
+    Point3duv pts[5];
 } DrawableFace;
 
 typedef struct {    

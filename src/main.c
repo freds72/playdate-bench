@@ -14,6 +14,7 @@
 
 #include "3dmath.h"
 #include "drawables.h"
+#include "gfx.h"
 
 static int update(void* userdata);
 static int init(void* userdata);
@@ -92,39 +93,40 @@ static Point3d cube_verts[8] = {
 };
 
 static ThreedFace cube_faces[6]={
-			{ .vi = {0,3,2,1}, .uv={ {.u = 0,.v = 0}, { .u = 2, .v = 0}, {.u = 2, .v = 2}, { .u = 0, .v = 2} }},
-			{ .vi = {0,1,5,4}, .uv={ {.u = 2,.v = 0}, { .u = 4, .v = 0}, {.u = 4, .v = 2}, { .u = 2, .v = 2} }},
-			{ .vi = {1,2,6,5}, .uv={ {.u = 0,.v = 0}, { .u = 2, .v = 0}, {.u = 2, .v = 2}, { .u = 0, .v = 2} }},
-			{ .vi = {2,3,7,6}, .uv={ {.u = 2,.v = 0}, { .u = 4, .v = 0}, {.u = 4, .v = 2}, { .u = 2, .v = 2} }},
-			{ .vi = {3,0,4,7}, .uv={ {.u = 0,.v = 0}, { .u = 2, .v = 0}, {.u = 2, .v = 2}, { .u = 0, .v = 2} }},
-			{ .vi = {4,5,6,7}, .uv={ {.u = 0,.v = 2}, { .u = 2, .v = 2}, {.u = 2, .v = 4}, { .u = 0, .v = 4} }}
-		};
+	{.vi = {0,3,2,1}, .uv = { {.u = 0, .v = 0 }, {.u = 0, .v = 31.9f},{.u = 31.9f, .v = 31.9f }, {.u = 31.9f, .v = 0 } }},
+	{.vi = {0,1,5,4}, .uv = { {.u = 0, .v = 0 }, {.u = 31.9f,.v = 0}, {.u = 31.9f, .v = 31.9f }, {.u = 0,  .v = 31.9f} }},
+	{.vi = {1,2,6,5}, .uv = { {.u = 0, .v = 0 }, {.u = 31.9f,.v = 0}, {.u = 31.9f, .v = 31.9f }, {.u = 0,  .v = 31.9f} }},
+	{.vi = {2,3,7,6}, .uv = { {.u = 0, .v = 0 }, {.u = 31.9f,.v = 0}, {.u = 31.9f, .v = 31.9f }, {.u = 0,  .v = 31.9f} }},
+	{.vi = {3,0,4,7}, .uv = { {.u = 31.9f,.v =0 },{.u = 0, .v = 0}, {.u = 0,  .v = 31.9f }, {.u = 31.9f, .v = 31.9f} }},
+	{.vi = {4,5,6,7}, .uv=  { {.u = 0, .v = 0},  {.u = 31.9f,.v = 0}, {.u = 31.9f, .v = 31.9f }, {.u = 0, .v = 31.9f} }}
+};
 
 static const ThreedModel cube = {
 	.vertices = cube_verts,
 	.faces = cube_faces,
 	.nfaces = 6
 };
+static uint8_t checker_texture[32 * 32];
 
 // clip polygon against near-z
-static int z_poly_clip(const float z, const float flip, Point3du* in, int n, Point3du* out) {
-    Point3du v0 = in[n - 1];
+static int z_poly_clip(const float z, const float flip, Point3duv* in, int n, Point3duv* out) {
+    Point3duv v0 = in[n - 1];
     float d0 = flip * (v0.z - z);
     int nout = 0;
     for (int i = 0; i < n; i++) {
-        Point3du v1 = in[i];
+        Point3duv v1 = in[i];
         int side = d0 > 0;
-        if (side) out[nout++] = (Point3du){ .v = { v0.x, v0.y, v0.z }, .u = v0.u, .light = v0.light };
+        if (side) out[nout++] = (Point3duv){ .pos = { v0.x, v0.y, v0.z }, .u = v0.u, .v = v0.v };
         const float d1 = flip * (v1.z - z);
         if ((d1 > 0) != side) {
             // clip!
             const float t = d0 / (d0 - d1);
-            out[nout++] = (Point3du){ .v = {
+            out[nout++] = (Point3duv){ .pos = {
                 lerpf(v0.x,v1.x,t),
                 lerpf(v0.y,v1.y,t),
                 z},
                 .u = lerpf(v0.u,v1.u,t),
-                .light = lerpf(v0.light,v1.light,t)
+                .v = lerpf(v0.v,v1.v,t)
             };
         }
         v0 = v1;
@@ -137,20 +139,22 @@ static void draw_face(Drawable* drawable, uint8_t* bitmap) {
     DrawableFace* face = &drawable->face;
 
     const int n = face->n;
-    Point3du* pts = face->pts;
+    Point3duv* pts = face->pts;
     for (int i = 0; i < n; ++i) {
         // project 
         const float w = 199.5f / pts[i].z;
         pts[i].x = 199.5f +  w * pts[i].x;
         pts[i].y = 119.5f -  w * pts[i].y;
+		pts[i].z = w;
     }
 
   	//polyfill(pts, n, _ordered_dithers + (int)(face->material * (1.f - shading)) * 32, (uint32_t*)bitmap);
+	texfill(pts, n, face->texture, bitmap);
 
     // don't "pop" edges if too far away
-		Point3du* p0 = &pts[n - 1];
+		Point3duv* p0 = &pts[n - 1];
 		for (int i = 0; i < n; ++i) {
-				Point3du* p1 = &pts[i];
+				Point3duv* p1 = &pts[i];
 				if (p0->u) {
 						pd->graphics->drawLine((int)p0->x, (int)p0->y, (int)p1->x, (int)p1->y, 1, kColorBlack);
 				}
@@ -159,7 +163,7 @@ static void draw_face(Drawable* drawable, uint8_t* bitmap) {
 }
 
 static void push_threeD_model(ThreedModel* model, const Point3d cv, const Mat4 m) {
-    Point3du tmp[4];		
+    Point3duv tmp[4];		
 	for (int i = 0; i < model->nfaces; i++) {
 		ThreedFace* f = &model->faces[i];
 		// visible?
@@ -170,7 +174,7 @@ static void push_threeD_model(ThreedModel* model, const Point3d cv, const Mat4 m
             float max_key = -FLT_MAX;
 			int n = 4;
 			for(int i=0;i<4;i++) {
-                Point3du* res = &tmp[i];
+                Point3duv* res = &tmp[i];
 
                 // project using active matrix
                 m_x_v(m, model->vertices[f->vi[i]], &res->p);
@@ -184,6 +188,10 @@ static void push_threeD_model(ThreedModel* model, const Point3d cv, const Mat4 m
                 if (res->z > max_key) max_key = res->z;
                 outcode &= code;
                 is_clipped_near |= code;
+
+				// uv's
+				res->u = f->uv[i].u;
+				res->v = f->uv[i].v;
             }
 
             // visible?
@@ -191,13 +199,14 @@ static void push_threeD_model(ThreedModel* model, const Point3d cv, const Mat4 m
                 Drawable* drawable = pop_drawable(min_key);
                 drawable->draw = draw_face;
                 drawable->key = min_key;
-                DrawableFace* face = &drawable->face;
+				DrawableFace* face = &drawable->face;
+				face->texture = checker_texture;
                 if (is_clipped_near & OUTCODE_NEAR) {
                     face->n = z_poly_clip(Z_NEAR, 1.0f, tmp, n, face->pts);
                 }
                 else {
                     face->n = n;
-                    memcpy(face->pts, tmp, n * sizeof(Point3du));
+                    memcpy(face->pts, tmp, n * sizeof(Point3duv));
                 }
             }       
         }
@@ -222,6 +231,30 @@ static int init(void* userdata) {
 		v_cross(n0,n1,&f->n);
 		v_normz(&f->n);
 		f->cp = v_dot(f->n, v0);
+	}
+
+	// load & prep texture
+	const char* err;
+	char* path = NULL;
+
+	// read dither table
+	pd->system->formatString(&path, "images/checker");
+	LCDBitmap* bitmap = pd->graphics->loadBitmap(path, &err);
+
+	if (!bitmap)
+		pd->system->logToConsole("Failed to load: %s, %s", path, err);
+
+	int w = 0, h = 0, r = 0;
+	uint8_t* mask = NULL;
+	uint8_t* data = NULL;
+	pd->graphics->getBitmapData(bitmap, &w, &h, &r, &mask, &data);
+	if (w != 32 || h != 32)
+		pd->system->logToConsole("Invalid image format: %dx%d", w, h);
+
+	for (uint8_t j = 0; j < 32; j++) {
+		for (uint8_t i = 0; i < 32; i++) {
+			checker_texture[i + j * 32] = ((i/8)+(j/8))%2 == 0 ? 0x80 : 0;
+		}
 	}
 }
 
@@ -258,8 +291,6 @@ static int update(void* userdata)
 		cam_angle += 0.1f;
 	}
 
-	const int N = 5000;
-
 	const float angle = pd->system->getElapsedTime();
 	const float c = cosf(cam_angle), s = sinf(cam_angle);
 	Point3d cam_pos = { .v = {cam_dist * c, cam_dist/2.f, cam_dist * s }};
@@ -292,10 +323,11 @@ static int update(void* userdata)
 
 	mode = "flat";
 
-	uint8_t* bitmap = pd->graphics->getDisplayFrame(); // buffer currently on screen (or headed there, anyway)
+	const int N = 1;
+
+	uint8_t* bitmap = pd->graphics->getFrame();
 	if (bitmap) {
-		// pd->graphics->clearBitmap(bitmap, kColorWhite);
-		memset(bitmap, kColorWhite, LCD_ROWS * LCD_ROWSIZE);
+		memset(bitmap, -1, LCD_ROWS * LCD_ROWSIZE);
 
 		const float t0 = pd->system->getElapsedTime();
 		draw_drawables(bitmap);
@@ -310,6 +342,8 @@ static int update(void* userdata)
 		pd->system->realloc(buf,0);
 	}
 		
+	pd->system->drawFPS(0, 230);
+
 	pd->graphics->markUpdatedRows(0, LCD_ROWS - 1);
 	return 1;
 }
