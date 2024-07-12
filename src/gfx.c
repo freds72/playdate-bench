@@ -98,16 +98,16 @@ static void drawTextureFragment(uint8_t* row, int x1, int x2, int lu, int lv, in
     if (x2 < 0 || x1 >= LCD_COLUMNS<<16)
         return;
 
-    int dx = x2 - x1;
     float frac = 1.0f - ((x1 & 0xffff) / (float)0xffff);
-    if (dx < 0xffff) return;
+    // convert to screen units
+    x1 >>= 16;
+    x2 >>= 16;
+    int dx = x2 - x1;
+    if (dx == 0) return;
     // uvw source is fixed point already
-    dx >>= 16;
     int du = (ru - lu) / dx;
     int dv = (rv - lv) / dx;
     int dw = (rw - lw) / dx;
-    x1 >>= 16;
-    x2 >>= 16;
     
     if (x1 < 0) {
         lu -= x1 * du;
