@@ -78,6 +78,12 @@ typedef struct {
     };
 } Flint;
 
+// basic texture definition
+typedef struct {
+    uint8_t size;
+    uint8_t* data;
+} Texture;
+
 // matrix struct
 typedef float Mat4[MAT4x4];
 

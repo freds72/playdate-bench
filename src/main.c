@@ -22,7 +22,14 @@ const char* fontpath = "/System/Fonts/Asheville-Sans-14-Bold.pft";
 LCDFont* font = NULL;
 static PlaydateAPI* pd;
 
-#define LCD_ROWSIZE32 (LCD_ROWSIZE / sizeof(uint32_t))
+void* (*lib3d_realloc)(void* ptr, size_t size);
+
+#define lib3d_malloc(s) lib3d_realloc(NULL, (s))
+#define lib3d_free(ptr) lib3d_realloc((ptr), 0)
+
+static void lib3d_setRealloc(void* (*realloc)(void* ptr, size_t size)) {
+	lib3d_realloc = realloc;
+}
 
 #ifdef _WINDLL
 __declspec(dllexport)
@@ -71,6 +78,7 @@ typedef struct {
 	int vi[4];
 	UV uv[4];
 	Point3d n;
+	Texture* texture;
 	float cp;	
 } ThreedFace;
 
@@ -92,13 +100,16 @@ static Point3d cube_verts[8] = {
 	{ .v = {0.f,1.f,1.f} },
 };
 
+static Texture side_texture = { 0 };
+static Texture top_texture = { 0 };
+
 static ThreedFace cube_faces[6]={
-	{.vi = {0,3,2,1}, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 0.1f, .v = 31.9f},{.u = 31.9f, .v = 31.9f }, {.u = 31.9f, .v = 0.1f } }},
-	{.vi = {0,1,5,4}, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 31.9f,.v = 0.1f}, {.u = 31.9f, .v = 31.9f }, {.u = 0.1f,  .v = 31.9f} }},
-	{.vi = {1,2,6,5}, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 31.9f,.v = 0.1f}, {.u = 31.9f, .v = 31.9f }, {.u = 0.1f,  .v = 31.9f} }},
-	{.vi = {2,3,7,6}, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 31.9f,.v = 0.1f}, {.u = 31.9f, .v = 31.9f }, {.u = 0.1f,  .v = 31.9f} }},
-	{.vi = {3,0,4,7}, .uv = { {.u = 31.9f,.v =0.1f },{.u = 0.1f, .v = 0.1f}, {.u = 0.1f,  .v = 31.9f }, {.u = 31.9f, .v = 31.9f} }},
-	{.vi = {4,5,6,7}, .uv=  { {.u = 0.1f, .v = 0.1f},  {.u = 31.9f,.v = 0.1f}, {.u = 31.9f, .v = 31.9f }, {.u = 0.1f, .v = 31.9f} }}
+	{.vi = {0,3,2,1}, .texture = &top_texture, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 0.1f, .v = 63.9f},{.u = 63.9f, .v = 63.9f }, {.u = 63.9f, .v = 0.1f } }},
+	{.vi = {0,1,5,4}, .texture = &side_texture, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 63.9f,.v = 0.1f}, {.u = 63.9f, .v = 63.9f }, {.u = 0.1f,  .v = 63.9f} }},
+	{.vi = {1,2,6,5}, .texture = &side_texture, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 63.9f,.v = 0.1f}, {.u = 63.9f, .v = 63.9f }, {.u = 0.1f,  .v = 63.9f} }},
+	{.vi = {2,3,7,6}, .texture = &side_texture, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 63.9f,.v = 0.1f}, {.u = 63.9f, .v = 63.9f }, {.u = 0.1f,  .v = 63.9f} }},
+	{.vi = {3,0,4,7}, .texture = &side_texture, .uv = { {.u = 63.9f,.v =0.1f },{.u = 0.1f, .v = 0.1f}, {.u = 0.1f,  .v = 63.9f }, {.u = 63.9f, .v = 63.9f} }},
+	{.vi = {4,5,6,7}, .texture = &top_texture, .uv=  { {.u = 0.1f, .v = 0.1f},  {.u = 63.9f,.v = 0.1f}, {.u = 63.9f, .v = 63.9f }, {.u = 0.1f, .v = 63.9f} }}
 };
 
 static ThreedModel cube = {
@@ -106,7 +117,6 @@ static ThreedModel cube = {
 	.faces = cube_faces,
 	.nfaces = 6
 };
-static uint8_t checker_texture[32 * 32];
 
 // clip polygon against near-z
 static int z_poly_clip(const float z, const float flip, Point3duv* in, int n, Point3duv* out) {
@@ -206,7 +216,7 @@ static void push_threeD_model(const ThreedModel* model, const Point3d cv, const 
                 drawable->draw = draw_face;
                 drawable->key = min_key;
 				DrawableFace* face = &drawable->face;
-				face->texture = checker_texture;
+				face->texture = f->texture;
                 if (is_clipped_near & OUTCODE_NEAR) {
                     face->n = z_poly_clip(Z_NEAR, 1.0f, tmp, n, face->pts);
                 }
@@ -219,8 +229,43 @@ static void push_threeD_model(const ThreedModel* model, const Point3d cv, const 
     }
 }
 
+static void load_texture(const char* name, Texture* texture) {
+	const char* err;
+	char* path = NULL;
+
+	// read dither table
+	pd->system->formatString(&path, "images/%s", name);
+	LCDBitmap* bitmap = pd->graphics->loadBitmap(path, &err);
+
+	if (!bitmap)
+		pd->system->logToConsole("Failed to load: %s, %s", path, err);
+
+	int w = 0, h = 0, r = 0;
+	uint8_t* mask = NULL;
+	uint8_t* data = NULL;
+	pd->graphics->getBitmapData(bitmap, &w, &h, &r, &mask, &data);
+	if (w != h)
+		pd->system->logToConsole("Invalid image format: %dx%d", w, h);
+
+	// allocate byte buffer
+	uint8_t* tex = lib3d_malloc(w * h);
+
+	for (uint8_t j = 0; j < h; j++, data += w/8) {
+		for (uint8_t i = 0; i < w; i++) {
+			tex[i + j * w] = (data[i/8] & (0x80>>(i&7)))?0x80:0;
+		}
+	}
+	texture->size = w;
+	texture->data = tex;
+
+	pd->graphics->freeBitmap(bitmap);
+}
+
 static void init(void* userdata) {
 	PlaydateAPI* pd = userdata;
+	
+	lib3d_setRealloc(pd->system->realloc);
+
 	drawables_init(pd);
 
 	// init models
@@ -239,29 +284,9 @@ static void init(void* userdata) {
 		f->cp = v_dot(f->n, v0);
 	}
 
-	// load & prep texture
-	const char* err;
-	char* path = NULL;
-
-	// read dither table
-	pd->system->formatString(&path, "images/checker");
-	LCDBitmap* bitmap = pd->graphics->loadBitmap(path, &err);
-
-	if (!bitmap)
-		pd->system->logToConsole("Failed to load: %s, %s", path, err);
-
-	int w = 0, h = 0, r = 0;
-	uint8_t* mask = NULL;
-	uint8_t* data = NULL;
-	pd->graphics->getBitmapData(bitmap, &w, &h, &r, &mask, &data);
-	if (w != 32 || h != 32)
-		pd->system->logToConsole("Invalid image format: %dx%d", w, h);
-
-	for (uint8_t j = 0; j < 32; j++) {
-		for (uint8_t i = 0; i < 32; i++) {
-			checker_texture[i + j * 32] = ((i/8)+(j/8))%2 == 0 ? 0x80 : 0;
-		}
-	}
+	// load & prep textures
+	load_texture("crate_side", &side_texture);
+	load_texture("crate_top", &top_texture);
 }
 
 float total = 0;

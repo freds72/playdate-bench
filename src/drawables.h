@@ -12,7 +12,7 @@ typedef struct {
     // number of points
     int n;
     // texture
-    uint8_t* texture;
+    Texture* texture;
     // clipped points in camera space
     Point3duv pts[5];
 } DrawableFace;
