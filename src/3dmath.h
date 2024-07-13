@@ -84,6 +84,17 @@ typedef struct {
     uint8_t* data;
 } Texture;
 
+// fixed type helper
+typedef struct {
+    union {
+        struct {
+            int16_t q0;
+            int16_t q1;
+        };
+        uint32_t i32;
+    };
+} Fixed;
+
 // matrix struct
 typedef float Mat4[MAT4x4];
 

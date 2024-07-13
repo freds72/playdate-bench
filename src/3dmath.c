@@ -183,6 +183,4 @@ void m_inv_translate(Mat4 m, const Point3d v) {
         -v.x, -v.y, -v.z, 1.f
     }, p);
     memcpy(m, p, sizeof(Mat4));
-
-    return 0;
 }

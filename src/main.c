@@ -154,9 +154,9 @@ static void draw_face(Drawable* drawable, uint8_t* bitmap) {
     Point3duv* pts = face->pts;
     for (int i = 0; i < n; ++i) {
         // project 
-        const float w = 199.5f / pts[i].z;
-        pts[i].x = 199.5f +  w * pts[i].x;
-        pts[i].y = 119.5f -  w * pts[i].y;
+        const float w = 1.0f / pts[i].z;
+        pts[i].x = 199.5f +  199.5f * w * pts[i].x;
+        pts[i].y = 119.5f -  199.5f * w * pts[i].y;
 		pts[i].z = w;
     }
 
@@ -164,8 +164,14 @@ static void draw_face(Drawable* drawable, uint8_t* bitmap) {
 	if (_mode == 0) {
 		texfill_baseline(pts, n, face->texture, bitmap);
 	}
-	else {
+	else if (_mode == 1) {
 		texfill(pts, n, face->texture, bitmap);
+	}
+	else if (_mode == 2) {
+		texfill_fixed(pts, n, face->texture, bitmap);
+	}
+	else {
+		polyfill_fixed(pts, n, (uint32_t*)bitmap);
 	}
 
     // Point3duv* p0 = &pts[n - 1];
@@ -297,7 +303,9 @@ static int update(void* userdata)
 {
 	static char* modes[] = {
 	"baseline",
-	"8-pixel strip + floats" };
+	"8-pixel strip + floats",
+	"per pixel (fixed16)",
+	"polyfill (fixed)"};
 	
 
 	pd->graphics->clear(kColorWhite);
@@ -310,7 +318,7 @@ static int update(void* userdata)
 	if (released & kButtonA) {
 		total = 0;
 		runs = 0;
-		_mode = (_mode + 1) % 2;
+		_mode = (_mode + 1) % 4;
 	}
 	if (pressed & kButtonUp) {
 		cam_dist += 0.1f;
