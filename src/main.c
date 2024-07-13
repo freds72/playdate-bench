@@ -104,12 +104,12 @@ static Texture side_texture = { 0 };
 static Texture top_texture = { 0 };
 
 static ThreedFace cube_faces[6]={
-	{.vi = {0,3,2,1}, .texture = &top_texture, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 0.1f, .v = 63.9f},{.u = 63.9f, .v = 63.9f }, {.u = 63.9f, .v = 0.1f } }},
-	{.vi = {0,1,5,4}, .texture = &side_texture, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 63.9f,.v = 0.1f}, {.u = 63.9f, .v = 63.9f }, {.u = 0.1f,  .v = 63.9f} }},
-	{.vi = {1,2,6,5}, .texture = &side_texture, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 63.9f,.v = 0.1f}, {.u = 63.9f, .v = 63.9f }, {.u = 0.1f,  .v = 63.9f} }},
-	{.vi = {2,3,7,6}, .texture = &side_texture, .uv = { {.u = 0.1f, .v = 0.1f }, {.u = 63.9f,.v = 0.1f}, {.u = 63.9f, .v = 63.9f }, {.u = 0.1f,  .v = 63.9f} }},
-	{.vi = {3,0,4,7}, .texture = &side_texture, .uv = { {.u = 63.9f,.v =0.1f },{.u = 0.1f, .v = 0.1f}, {.u = 0.1f,  .v = 63.9f }, {.u = 63.9f, .v = 63.9f} }},
-	{.vi = {4,5,6,7}, .texture = &top_texture, .uv=  { {.u = 0.1f, .v = 0.1f},  {.u = 63.9f,.v = 0.1f}, {.u = 63.9f, .v = 63.9f }, {.u = 0.1f, .v = 63.9f} }}
+	{.vi = {0,3,2,1}, .texture = &top_texture, .uv = { {.u = 0.f, .v = 0.f }, {.u = 0.f, .v = 63.9f},{.u = 63.9f, .v = 63.9f }, {.u = 63.9f, .v = 0.f } }},
+	{.vi = {0,1,5,4}, .texture = &side_texture, .uv = { {.u = 0.f, .v = 0.f }, {.u = 63.9f,.v = 0.f}, {.u = 63.9f, .v = 63.9f }, {.u = 0.f,  .v = 63.9f} }},
+	{.vi = {1,2,6,5}, .texture = &side_texture, .uv = { {.u = 0.f, .v = 0.f }, {.u = 63.9f,.v = 0.f}, {.u = 63.9f, .v = 63.9f }, {.u = 0.f,  .v = 63.9f} }},
+	{.vi = {2,3,7,6}, .texture = &side_texture, .uv = { {.u = 0.f, .v = 0.f }, {.u = 63.9f,.v = 0.f}, {.u = 63.9f, .v = 63.9f }, {.u = 0.f,  .v = 63.9f} }},
+	{.vi = {3,0,4,7}, .texture = &side_texture, .uv = { {.u = 63.9f,.v =0.f },{.u = 0.f, .v = 0.f}, {.u = 0.f,  .v = 63.9f }, {.u = 63.9f, .v = 63.9f} }},
+	{.vi = {4,5,6,7}, .texture = &top_texture, .uv=  { {.u = 0.f, .v = 0.f},  {.u = 63.9f,.v = 0.f}, {.u = 63.9f, .v = 63.9f }, {.u = 0.f, .v = 63.9f} }}
 };
 
 static ThreedModel cube = {
@@ -303,7 +303,7 @@ float cam_angle = 2.5f;
 static int update(void* userdata)
 {
 	static char* modes[] = {
-	"per-pixel divide + fixed16",
+	"8-pixel strip + fixed16",
 	"8-pixel strip + floats",
 	"8-pixel strip + fixed10:6",
 	"polyfill + fixed16"};
