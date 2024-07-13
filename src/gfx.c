@@ -185,21 +185,27 @@ static void drawTextureFragment(uint8_t* row, int x1, int x2, int lu, int lv, in
         }
 
         x2 -= 8;
+        
+        float u0 = (lu / (float)lw) , v0 = (lv / (float)lw);
         while (x <= x2)
         {
+            // next
+            const float u1 = ((lu+8*du) / (float)(lw+8*dw)), v1 = ((lv+8*dv) / (float)(lw+8*dw));
+            const float ddu = (u1 - u0) / 8.0f, ddv = (v1 - v0) / 8.0f;
             uint8_t src = 0;
-            for (int i = 0; i < 8; i++) {
-                int u = (lu / lw) &31, v = (lv / lw) &31;
+            for (int i = 0; i < 8; i++, u0+=ddu, v0+=ddv) {
                 // texture encoded as 1 pixel per byte
-                src |= texture[u + v * 32] >> i;
+                src |= texture[(((int)u0)&31) + ((((int)v0))&31) * 32] >> i;
                 // src |= 0x80 >> i;
-                lu += du;
-                lv += dv;
-                lw += dw;
             }
+            lu += 8 * du;
+            lv += 8 * dv;
+            lw += 8 * dw;
 
             *(p++) = src;
             x += 8;
+            u0 = u1;
+            v0 = v1;
         }
 
         if (endbit > 0) {
@@ -344,6 +350,209 @@ void texfill(const Point3duv* verts, const int n, uint8_t* texture, uint8_t* bit
             rv = __TOFIXED16(v0) + (int)(cy * rdv);
         }
         drawTextureFragment(bitmap, lx, rx, lu, lv, lw, ru, rv, rw, texture);
+        // drawFragment((uint32_t*)bitmap, lx >> 16, rx >> 16, 0x0);
+    }
+}
+
+// perspective correct texturing - base version
+// x1/x2 are fixed 16:16!!
+static void drawTextureFragment_baseline(uint8_t* row, int x1, int x2, int lu, int lv, int lw, int ru, int rv, int rw, uint8_t* texture)
+{
+    if (x2 < 0 || x1 >= LCD_COLUMNS << 16)
+        return;
+
+    if (x1 > x2)
+        return;
+
+    float frac = (x1 / (float)(1 << 16));
+    float dx = (x2 / (float)(1 << 16)) - frac;
+    frac = ((int)frac) - frac;
+    // convert to screen units
+    x1 >>= 16;
+    x2 >>= 16;
+
+    if (x2 > LCD_COLUMNS)
+        x2 = LCD_COLUMNS;
+
+    // int dx = x2 - x1;
+    if (x2 - x1 == 0) return;
+    // uvw source is fixed point already
+    const int du = (ru - lu) / dx;
+    const int dv = (rv - lv) / dx;
+    const int dw = (rw - lw) / dx;
+
+    if (x1 < 0) {
+        lu -= x1 * du;
+        lv -= x1 * dv;
+        lw -= x1 * dw;
+        x1 = 0;
+        frac = 0.f;
+    }
+    // sub-pix shift
+    lu += (int)(frac * du);
+    lv += (int)(frac * dv);
+    lw += (int)(frac * dw);
+
+    // Operate on 8 bits at a time
+    const int startbit = x1 & 7;
+    const uint8_t startmask = (1 << (8 - startbit)) - 1;
+    const int endbit = x2 & 7;
+    const uint8_t endmask = ((1 << endbit) - 1) << (8 - endbit);
+
+    const int col = x1 >> 3;
+    uint8_t* p = row + col;
+
+    if (col == x2 >> 3)
+    {
+        uint8_t mask = 0;
+
+        if (startbit > 0 && endbit > 0)
+            mask = startmask & endmask;
+        else if (startbit > 0)
+            mask = startmask;
+        else if (endbit > 0)
+            mask = endmask;
+
+        // build pixels
+        uint8_t src = 0;
+        for (int x = x1; x < x2; x++) {
+            int u = (lu / lw) & 31, v = (lv / lw) & 31;
+            // texture encoded as 1 pixel per byte
+            src |= texture[u + v * 32] >> (x & 7);
+            // src |= 0x80 >> (x & 7);
+            lu += du;
+            lv += dv;
+            lw += dw;
+        }
+        *p = (*p & ~mask) | src;
+    }
+    else
+    {
+        int x = x1;
+
+        if (startbit > 0)
+        {
+            uint8_t src = 0;
+            for (int i = startbit; i < 8; i++) {
+                int u = (lu / lw) & 31, v = (lv / lw) & 31;
+                // texture encoded as 1 pixel per byte
+                src |= texture[u + v * 32] >> i;
+                // src |= 0x80 >> i;
+                lu += du;
+                lv += dv;
+                lw += dw;
+            }
+            *p = (*p & ~startmask) | src;
+            p++;
+            x += (8 - startbit);
+        }
+
+        x2 -= 8;
+
+        while (x <= x2)
+        {
+            uint8_t src = 0;
+            for (int i = 0; i < 8; i++) {
+                int u = (lu / lw) &31, v = (lv / lw) &31;
+                // texture encoded as 1 pixel per byte
+                src |= texture[u + v * 32] >> i;
+                // src |= 0x80 >> i;
+                lu += du;
+                lv += dv;
+                lw += dw;
+            }
+
+            *(p++) = src;
+            x += 8;
+        }
+
+        if (endbit > 0) {
+            uint8_t src = 0;
+            for (int i = 0; i < endbit; i++) {
+                int u = (lu / lw) & 31, v = (lv / lw) & 31;
+                // texture encoded as 1 pixel per byte
+                src |= texture[u + v * 32] >> i;
+                // src |= 0x80 >> i;
+                lu += du;
+                lv += dv;
+                lw += dw;
+            }
+            *p = (*p & ~endmask) | src;
+        }
+    }
+}
+// z contains dither color
+void texfill_baseline(const Point3duv* verts, const int n, uint8_t* texture, uint8_t* bitmap) {
+
+    float miny = FLT_MAX, maxy = -FLT_MAX;
+    int mini = -1;
+    // find extent
+    for (int i = 0; i < n; ++i) {
+        float y = verts[i].y;
+        if (y < miny) miny = y, mini = i;
+        if (y > maxy) maxy = y;
+    }
+    // out of screen?
+    if (miny > LCD_ROWS || maxy < 0) {
+        return;
+    }
+
+    // data for left& right edges :
+    int lj = mini, rj = mini;
+    int ly = -1, ry = -1;
+    int lx = 0, ldx = 0, rx = 0, rdx = 0;
+    int lu = 0, ldu = 0, ru = 0, rdu = 0;
+    int lv = 0, ldv = 0, rv = 0, rdv = 0;
+    int lw = 0, ldw = 0, rw = 0, rdw = 0;
+    int ystart = (int)ceilf(miny), yend = (int)ceilf(maxy);
+    if (yend > LCD_ROWS) yend = LCD_ROWS;
+    if (ystart < 0) ystart = 0;
+    bitmap += ystart * LCD_ROWSIZE;
+    for (int y = ystart; y < yend; y++, bitmap += LCD_ROWSIZE, lx += ldx, rx += rdx, lu += ldu, ru += rdu, lv += ldv, rv += rdv, lw += ldw, rw += rdw) {
+        // maybe update to next vert
+        while (ly < y) {
+            const Point3duv* p0 = &verts[lj];
+            lj++;
+            if (lj >= n) lj = 0;
+            const Point3duv* p1 = &verts[lj];
+            const float y0 = p0->y, y1 = p1->y;
+            const float w0 = p0->z, w1 = p1->z;
+            const float u0 = p0->u * w0, v0 = p0->v * w0;
+            const float dy = y1 - y0;
+            ly = (int)y1;
+            ldx = __TOFIXED16((p1->x - p0->x) / dy);
+            ldw = __TOFIXED16((w1 - w0) / dy);
+            ldu = __TOFIXED16((p1->u * w1 - u0) / dy);
+            ldv = __TOFIXED16((p1->v * w1 - v0) / dy);
+            //sub - pixel correction
+            const float cy = y - y0;
+            lx = __TOFIXED16(p0->x) + (int)(cy * ldx);
+            lw = __TOFIXED16(w0) + (int)(cy * ldw);
+            lu = __TOFIXED16(u0) + (int)(cy * ldu);
+            lv = __TOFIXED16(v0) + (int)(cy * ldv);
+        }
+        while (ry < y) {
+            const Point3duv* p0 = &verts[rj];
+            rj--;
+            if (rj < 0) rj = n - 1;
+            const Point3duv* p1 = &verts[rj];
+            const float y0 = p0->y, y1 = p1->y;
+            const float w0 = p0->z, w1 = p1->z;
+            const float u0 = p0->u * w0, v0 = p0->v * w0;
+            const float dy = y1 - y0;
+            ry = (int)y1;
+            rdx = __TOFIXED16((p1->x - p0->x) / dy);
+            rdw = __TOFIXED16((w1 - w0) / dy);
+            rdu = __TOFIXED16((p1->u * w1 - u0) / dy);
+            rdv = __TOFIXED16((p1->v * w1 - v0) / dy);
+            //sub - pixel correction
+            const float cy = y - y0;
+            rx = __TOFIXED16(p0->x) + (int)(cy * rdx);
+            rw = __TOFIXED16(w0) + (int)(cy * rdw);
+            ru = __TOFIXED16(u0) + (int)(cy * rdu);
+            rv = __TOFIXED16(v0) + (int)(cy * rdv);
+        }
+        drawTextureFragment_baseline(bitmap, lx, rx, lu, lv, lw, ru, rv, rw, texture);
         // drawFragment((uint32_t*)bitmap, lx >> 16, rx >> 16, 0x0);
     }
 }

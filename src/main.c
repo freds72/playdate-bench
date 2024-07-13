@@ -17,7 +17,7 @@
 #include "gfx.h"
 
 static int update(void* userdata);
-static int init(void* userdata);
+static void init(void* userdata);
 const char* fontpath = "/System/Fonts/Asheville-Sans-14-Bold.pft";
 LCDFont* font = NULL;
 static PlaydateAPI* pd;
@@ -101,7 +101,7 @@ static ThreedFace cube_faces[6]={
 	{.vi = {4,5,6,7}, .uv=  { {.u = 0.1f, .v = 0.1f},  {.u = 31.9f,.v = 0.1f}, {.u = 31.9f, .v = 31.9f }, {.u = 0.1f, .v = 31.9f} }}
 };
 
-static const ThreedModel cube = {
+static ThreedModel cube = {
 	.vertices = cube_verts,
 	.faces = cube_faces,
 	.nfaces = 6
@@ -135,6 +135,8 @@ static int z_poly_clip(const float z, const float flip, Point3duv* in, int n, Po
     return nout;
 }
 
+static int _mode = 0;
+
 static void draw_face(Drawable* drawable, uint8_t* bitmap) {
     DrawableFace* face = &drawable->face;
 
@@ -149,19 +151,24 @@ static void draw_face(Drawable* drawable, uint8_t* bitmap) {
     }
 
   	//polyfill(pts, n, _ordered_dithers + (int)(face->material * (1.f - shading)) * 32, (uint32_t*)bitmap);
-	texfill(pts, n, face->texture, bitmap);
-
-    Point3duv* p0 = &pts[n - 1];
-	for (int i = 0; i < n; ++i) {
-			Point3duv* p1 = &pts[i];
-			if (p0->u) {
-					pd->graphics->drawLine((int)p0->x, (int)p0->y, (int)p1->x, (int)p1->y, 1, kColorBlack);
-			}
-			p0 = p1;
+	if (_mode == 0) {
+		texfill_baseline(pts, n, face->texture, bitmap);
 	}
+	else {
+		texfill(pts, n, face->texture, bitmap);
+	}
+
+    // Point3duv* p0 = &pts[n - 1];
+	// for (int i = 0; i < n; ++i) {
+	// 		Point3duv* p1 = &pts[i];
+	// 		if (p0->u) {
+	// 				pd->graphics->drawLine((int)p0->x, (int)p0->y, (int)p1->x, (int)p1->y, 1, kColorBlack);
+	// 		}
+	// 		p0 = p1;
+	// }
 }
 
-static void push_threeD_model(ThreedModel* model, const Point3d cv, const Mat4 m) {
+static void push_threeD_model(const ThreedModel* model, const Point3d cv, const Mat4 m) {
     Point3duv tmp[4];		
 	for (int i = 0; i < model->nfaces; i++) {
 		ThreedFace* f = &model->faces[i];
@@ -212,7 +219,7 @@ static void push_threeD_model(ThreedModel* model, const Point3d cv, const Mat4 m
     }
 }
 
-static int init(void* userdata) {
+static void init(void* userdata) {
 	PlaydateAPI* pd = userdata;
 	drawables_init(pd);
 
@@ -259,21 +266,26 @@ static int init(void* userdata) {
 
 float total = 0;
 int runs = 0;
-float cam_dist = 4.0f;
-float cam_angle = 0.f;
+float cam_dist = 2.f;
+float cam_angle = 2.5f;
 static int update(void* userdata)
 {
-	char* mode;
+	static char* modes[] = {
+	"baseline",
+	"8-pixel strip + floats" };
+	
 
 	pd->graphics->clear(kColorWhite);
-	uint32_t* screen = (uint32_t * )pd->graphics->getFrame(); // working buffer
+	uint8_t* screen = pd->graphics->getFrame(); // working buffer
+
 	PDButtons pressed;
 	PDButtons pushed;
 	PDButtons released;
 	pd->system->getButtonState(&pressed, &pushed, &released);
-	if ((pushed|released) & kButtonA) {
+	if (released & kButtonA) {
 		total = 0;
 		runs = 0;
+		_mode = (_mode + 1) % 2;
 	}
 	if (pressed & kButtonUp) {
 		cam_dist += 0.1f;
@@ -290,7 +302,6 @@ static int update(void* userdata)
 		cam_angle += 0.1f;
 	}
 
-	const float angle = pd->system->getElapsedTime();
 	const float c = cosf(cam_angle), s = sinf(cam_angle);
 	Point3d cam_pos = { .v = {cam_dist * c, cam_dist/2.f, cam_dist * s }};
 	Point3d look_at = { .v = {0.f, 0.f, 0.f }};
@@ -320,26 +331,19 @@ static int update(void* userdata)
 
 	push_threeD_model(&cube, inv_cam_pos, mvv);
 
-	mode = "flat";
-
 	const int N = 1;
 
-	uint8_t* bitmap = pd->graphics->getFrame();
-	if (bitmap) {
-		memset(bitmap, -1, LCD_ROWS * LCD_ROWSIZE);
+	const float t0 = pd->system->getElapsedTime();
+	draw_drawables(screen);
+	const float t1 = pd->system->getElapsedTime();
 
-		const float t0 = pd->system->getElapsedTime();
-		draw_drawables(bitmap);
-		const float t1 = pd->system->getElapsedTime();
-
-		total += t1 - t0;
-		runs += 1;
-		const float avg = total / runs;
-		char* buf;
-		int len = pd->system->formatString(&buf,"Mode: %s\nElapsed time: %f s\n(%i calls/s)\nraw: %f s",mode,avg,(int)(N / avg),t1-t0);
-		pd->graphics->drawText(buf, len, kASCIIEncoding, 2, 2);
-		pd->system->realloc(buf,0);
-	}
+	total += t1 - t0;
+	runs += 1;
+	const float avg = total / runs;
+	char* buf;
+	int len = pd->system->formatString(&buf,"Mode: %s\nElapsed time: %f s\n(%i calls/s)\nraw: %f s",modes[_mode], avg, (int)(N / avg), t1 - t0);
+	pd->graphics->drawText(buf, len, kASCIIEncoding, 2, 2);
+	pd->system->realloc(buf,0);
 		
 	pd->system->drawFPS(0, 230);
 
