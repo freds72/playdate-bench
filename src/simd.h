@@ -62,6 +62,8 @@ inline uint32_t __SMLAD(uint32_t x, uint32_t y, uint32_t sum)
 #endif
 }
 
+#define FIXED16_SHIFT 16
+
 // convert the given float into a 16:16 fixed point (int32)
 #if TARGET_PLAYDATE
 static __attribute__((always_inline))
@@ -71,7 +73,7 @@ static __forceinline
 inline int32_t __TOFIXED16(float x)
 {
     // will corectly generate a vcvt asm instruction
-    return (int32_t)(x * (1<<16));
+    return (int32_t)(x * (1 << FIXED16_SHIFT));
 }
 
 #define FIXED8_SHIFT 6

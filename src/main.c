@@ -273,6 +273,7 @@ static void init(void* userdata) {
 	lib3d_setRealloc(pd->system->realloc);
 
 	drawables_init(pd);
+	gfx_init(pd);
 
 	// init models
 	ThreedModel* model = &cube;
@@ -302,10 +303,10 @@ float cam_angle = 2.5f;
 static int update(void* userdata)
 {
 	static char* modes[] = {
-	"baseline",
+	"per-pixel divide + fixed16",
 	"8-pixel strip + floats",
-	"per pixel (fixed16)",
-	"polyfill (fixed)"};
+	"8-pixel strip + fixed10:6",
+	"polyfill + fixed16"};
 	
 
 	pd->graphics->clear(kColorWhite);
