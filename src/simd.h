@@ -7,11 +7,12 @@
 typedef int32_t q31_t;
 
 #if TARGET_PLAYDATE
-static __attribute__((always_inline))
+#define INLINE static __attribute__((always_inline)) inline
 #else
-static __forceinline
+#define INLINE static __forceinline
 #endif
-inline uint32_t swap(uint32_t n)
+
+INLINE uint32_t swap(uint32_t n)
 {
 #if TARGET_PLAYDATE
     //return __REV(n);
@@ -24,12 +25,7 @@ inline uint32_t swap(uint32_t n)
 #endif
 }
 
-#if TARGET_PLAYDATE
-static __attribute__((always_inline))
-#else
-static __forceinline
-#endif
-inline uint32_t __SADD16(uint32_t op1, uint32_t op2)
+INLINE uint32_t __SADD16(uint32_t op1, uint32_t op2)
 {
 #if TARGET_PLAYDATE
     uint32_t result;
@@ -43,12 +39,34 @@ inline uint32_t __SADD16(uint32_t op1, uint32_t op2)
 #endif
 }
 
+typedef struct {
+    union {
+        struct {
+            int16_t q0;
+            int16_t q1;
+        };
+        uint32_t i32;
+    };
+} q16_t;
+
+INLINE uint32_t __SSUB16(uint32_t op1, uint32_t op2)
+{
 #if TARGET_PLAYDATE
-static __attribute__((always_inline))
+    uint32_t result;
+
+    __asm volatile ("ssub16 %0, %1, %2" : "=r" (result) : "r" (op1), "r" (op2));
+    return(result);
 #else
-static __forceinline
+    q16_t a = { .i32 = op1 }, b = { .i32 = op2 };
+    q16_t res = {
+        .q0 = a.q0 - b.q0,
+        .q1 = a.q1 - b.q1 
+    };
+    return res.i32;
 #endif
-inline uint32_t __SMLAD(uint32_t x, uint32_t y, uint32_t sum)
+}
+
+INLINE uint32_t __SMLAD(uint32_t x, uint32_t y, uint32_t sum)
 {
 #if TARGET_PLAYDATE
   uint32_t result;
@@ -65,12 +83,7 @@ inline uint32_t __SMLAD(uint32_t x, uint32_t y, uint32_t sum)
 #define FIXED16_SHIFT 16
 
 // convert the given float into a 16:16 fixed point (int32)
-#if TARGET_PLAYDATE
-static __attribute__((always_inline))
-#else
-static __forceinline
-#endif
-inline int32_t __TOFIXED16(float x)
+INLINE int32_t __TOFIXED16(float x)
 {
     // will corectly generate a vcvt asm instruction
     return (int32_t)(x * (1 << FIXED16_SHIFT));
@@ -79,12 +92,7 @@ inline int32_t __TOFIXED16(float x)
 #define FIXED8_SHIFT 6
 
 // convert float to 12:4 fixed (int16)
-#if TARGET_PLAYDATE
-static __attribute__((always_inline))
-#else
-static __forceinline
-#endif
-inline int16_t __TOFIXED8(float x)
+INLINE int16_t __TOFIXED8(float x)
 {
     // will corectly generate a vcvt asm instruction
     return (int16_t)(x * (1 << FIXED8_SHIFT));

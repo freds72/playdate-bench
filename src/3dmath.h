@@ -88,6 +88,12 @@ typedef struct {
 typedef struct {
     union {
         struct {
+            int8_t b0;
+            int8_t b1;
+            int8_t b2;
+            int8_t b3;
+        };
+        struct {
             int16_t q0;
             int16_t q1;
         };

@@ -305,7 +305,7 @@ static int update(void* userdata)
 	static char* modes[] = {
 	"8-pixel strip + fixed16",
 	"8-pixel strip + floats",
-	"8-pixel strip + fixed10:6",
+	"8-pixel strip + fixed16 + uv*256",
 	"polyfill + fixed16"};
 	
 
