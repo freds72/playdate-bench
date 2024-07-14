@@ -353,11 +353,6 @@ void texfill(const Point3duv* verts, const int n, Texture* texture, uint8_t* bit
     }
 }
 
-static int32_t fixed_div_16(int32_t x, int32_t y)
-{
-    return ((int64_t)x * (1 << FIXED16_SHIFT)) / y;
-}
-
 // perspective correct texturing - base version
 // x1/x2 are fixed 16:16!!
 // tw: texture width
@@ -381,9 +376,9 @@ static void drawTextureFragment_baseline(uint8_t* row, int x1, int x2, int lu, i
         x2 = LCD_COLUMNS;
 
     // int dx = x2 - x1;
-    if (x2-x1 == 0) return;
+    if (x2 - x1 == 0) return;
 
-    // delta have a precision of 1/16
+    // using floats to keep precision
     const int du = __TOFIXED16((ru - lu) / dx);
     const int dv = __TOFIXED16((rv - lv) / dx);
     const int dw = __TOFIXED16((rw - lw) / dx);
@@ -458,7 +453,12 @@ static void drawTextureFragment_baseline(uint8_t* row, int x1, int x2, int lu, i
 
         if (x <= x2) {
             // starting point (with additional precision)
-            int u0 = ((64 * lu) / lw), v0 = ((64 * lv) / lw) ;
+            // note: scaling factor must not overflow +-32768
+            Fixed uv0 = {
+                .q0 = ((64 * lu) / lw),
+                .q1 = ((64 * lv) / lw),
+            };
+            const int uv0mask = tmask | tmask << 16;
             const int du_strip = 8 * du, dv_strip = 8 * dv, dw_strip = 8 * dw;
             while (x <= x2)
             {
@@ -467,20 +467,47 @@ static void drawTextureFragment_baseline(uint8_t* row, int x1, int x2, int lu, i
                 lv += dv_strip;
                 lw += dw_strip;
                 // end point (with additional precision)
-                const int u1 = ((64 * lu) / lw)  , v1 = ((64 * lv) / lw) ;
-                const int ddu = (u1 - u0) / 8, ddv = (v1 - v0) / 8;
+                Fixed uv1 = {
+                    .q0 = ((64 * lu) / lw),
+                    .q1 = ((64 * lv) / lw),
+                };
+                // single instruction substract
+                const Fixed tmp = { .i32 = __SSUB16(uv1.i32, uv0.i32) };
+
+                // divide by step size (and keep sign!)
+                const Fixed dduv = {
+                    .q0 = tmp.q0 >> 3,
+                    .q1 = tmp.q1 >> 3
+                };
+                Fixed uv;
                 uint8_t src = 0;
-                for (int i = 0; i < 8; i++, u0 += ddu, v0 += ddv) {
-                    int u = (u0>>6) & tmask, v = (v0>>6) & tmask;
-                    // texture encoded as 1 pixel per byte
-                    src |= texture[u + v * tw] >> i;
-                    // src |= 0x80 >> i;
-                }
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                uv0.i32 += dduv.i32;
+                src += texture[uv.q0 + uv.q1 * tw] >> 0; 
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                uv0.i32 += dduv.i32;
+                src += texture[uv.q0 + uv.q1 * tw] >> 1; 
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                uv0.i32 += dduv.i32;
+                src += texture[uv.q0 + uv.q1 * tw] >> 2; 
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                uv0.i32 += dduv.i32;
+                src += texture[uv.q0 + uv.q1 * tw] >> 3; 
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                uv0.i32 += dduv.i32;
+                src += texture[uv.q0 + uv.q1 * tw] >> 4; 
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                uv0.i32 += dduv.i32;
+                src += texture[uv.q0 + uv.q1 * tw] >> 5; 
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                uv0.i32 += dduv.i32;
+                src += texture[uv.q0 + uv.q1 * tw] >> 6; 
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                src += texture[uv.q0 + uv.q1 * tw] >> 7;
 
                 *(p++) = src;
                 x += 8;
-                u0 = u1;
-                v0 = v1;
+                uv0 = uv1;
             }
         }
 
@@ -694,10 +721,10 @@ static void drawTextureFragment_fixed(uint8_t* row, int x1, int x2, int lu, int 
 
         // build pixels
         uint8_t src = 0;
-        for (int x = x1; x < x2; x++) {
-            int u = (lu / lw) & tmask, v = (lv / lw) & tmask;
+        for (int i = x1 & 7; i < (x2 & 7); i++) {
+            const int u = (lu / lw) & tmask, v = (lv / lw) & tmask;
             // texture encoded as 1 pixel per byte
-            src |= texture[u + v * tw] >> (x & 7);
+            src |= texture[u + v * tw] >> i;
             // src |= 0x80 >> (x & 7);
             lu += du;
             lv += dv;
@@ -713,10 +740,10 @@ static void drawTextureFragment_fixed(uint8_t* row, int x1, int x2, int lu, int 
         {
             uint8_t src = 0;
             for (int i = startbit; i < 8; i++) {
-                int u = (lu / lw) & tmask, v = (lv / lw) & tmask;
+                const int u = (lu / lw) & tmask, v = (lv / lw) & tmask;
                 // texture encoded as 1 pixel per byte
                 src |= texture[u + v * tw] >> i;
-                // src |= 0x80 >> i;
+                // src |= 0x80 >> (x & 7);
                 lu += du;
                 lv += dv;
                 lw += dw;
@@ -731,54 +758,49 @@ static void drawTextureFragment_fixed(uint8_t* row, int x1, int x2, int lu, int 
         if (x <= x2) {
             // starting point (with additional precision)
             // note: scaling factor must not overflow +-32768
-            Fixed uv0 = {
-                .q0 = ((64 * lu) / lw),
-                .q1 = ((64 * lv) / lw),
-            };
-            const int uv0mask = tmask | tmask << 16;
+            int u0 = ((64 * lu) / lw), v0 = ((64 * lv) / lw);
             const int du_strip = 8 * du, dv_strip = 8 * dv, dw_strip = 8 * dw;
-            while (x <= x2)
+            do
             {
                 // next
                 lu += du_strip;
                 lv += dv_strip;
                 lw += dw_strip;
                 // end point (with additional precision)
-                Fixed uv1 = {
-                    .q0 = ((64 * lu) / lw),
-                    .q1 = ((64 * lv) / lw),
-                };
-                // single instruction substract
-                const Fixed tmp = { .i32 = __SSUB16(uv1.i32, uv0.i32) };
+                const int u1 = ((64 * lu) / lw), v1 = ((64 * lv) / lw);
 
                 // divide by step size (and keep sign!)
-                const Fixed dduv = {
-                    .q0 = tmp.q0 >> 3,
-                    .q1 = tmp.q1 >> 3
-                };
-                Fixed uv;
+                const int ddu = (u1 - u0) / 8, ddv = (v1 - v0) / 8;
+
                 uint8_t src = 0;
-                uv.i32 = (uv0.i32 >> 6) & uv0mask;
-                src += texture[uv.q0 + uv.q1 * tw] >> 0; uv0.i32 += dduv.i32;
-                uv.i32 = (uv0.i32 >> 6) & uv0mask;
-                src += texture[uv.q0 + uv.q1 * tw] >> 1; uv0.i32 += dduv.i32;
-                uv.i32 = (uv0.i32 >> 6) & uv0mask;
-                src += texture[uv.q0 + uv.q1 * tw] >> 2; uv0.i32 += dduv.i32;
-                uv.i32 = (uv0.i32 >> 6) & uv0mask;
-                src += texture[uv.q0 + uv.q1 * tw] >> 3; uv0.i32 += dduv.i32;
-                uv.i32 = (uv0.i32 >> 6) & uv0mask;
-                src += texture[uv.q0 + uv.q1 * tw] >> 4; uv0.i32 += dduv.i32;
-                uv.i32 = (uv0.i32 >> 6) & uv0mask;
-                src += texture[uv.q0 + uv.q1 * tw] >> 5; uv0.i32 += dduv.i32;
-                uv.i32 = (uv0.i32 >> 6) & uv0mask;
-                src += texture[uv.q0 + uv.q1 * tw] >> 6; uv0.i32 += dduv.i32;
-                uv.i32 = (uv0.i32 >> 6) & uv0mask;
-                src += texture[uv.q0 + uv.q1 * tw] >> 7;
+                int u = (u0>>6) & tmask, v = (v0>>6) & tmask;
+                u0 += ddu, v0 += ddv;
+                src += texture[u + v * tw] >> 0;
+                u = (u0 >> 6) & tmask, v = (v0 >> 6) & tmask;
+                u0 += ddu, v0 += ddv;
+                src += texture[u + v * tw] >> 1; 
+                u = (u0 >> 6) & tmask, v = (v0 >> 6) & tmask;
+                u0 += ddu, v0 += ddv;
+                src += texture[u + v * tw] >> 2; 
+                u = (u0 >> 6) & tmask, v = (v0 >> 6) & tmask;
+                u0 += ddu, v0 += ddv;
+                src += texture[u + v * tw] >> 3; 
+                u = (u0 >> 6) & tmask, v = (v0 >> 6) & tmask;
+                u0 += ddu, v0 += ddv;
+                src += texture[u + v * tw] >> 4; 
+                u = (u0 >> 6) & tmask, v = (v0 >> 6) & tmask;
+                u0 += ddu, v0 += ddv;
+                src += texture[u + v * tw] >> 5; 
+                u = (u0 >> 6) & tmask, v = (v0 >> 6) & tmask;
+                u0 += ddu, v0 += ddv;
+                src += texture[u + v * tw] >> 6; 
+                u = (u0 >> 6) & tmask, v = (v0 >> 6) & tmask;
+                src += texture[u + v * tw] >> 7;
 
                 *(p++) = src;
                 x += 8;
-                uv0 = uv1;
-            }
+                u0 = u1, v0 = v1;
+            } while (x <= x2);
         }
 
         if (endbit > 0) {

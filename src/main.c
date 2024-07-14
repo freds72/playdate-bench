@@ -170,9 +170,6 @@ static void draw_face(Drawable* drawable, uint8_t* bitmap) {
 	else if (_mode == 2) {
 		texfill_fixed(pts, n, face->texture, bitmap);
 	}
-	else {
-		polyfill_fixed(pts, n, (uint32_t*)bitmap);
-	}
 
     // Point3duv* p0 = &pts[n - 1];
 	// for (int i = 0; i < n; ++i) {
@@ -303,10 +300,9 @@ float cam_angle = 2.5f;
 static int update(void* userdata)
 {
 	static char* modes[] = {
-	"8-pixel strip + fixed16",
+	"8-pixel strip + fixed16 + q16q16",
 	"8-pixel strip + floats",
-	"8-pixel strip + fixed16 + uv*256",
-	"polyfill + fixed16"};
+	"8-pixel strip + fixed16 + unrolled"};
 	
 
 	pd->graphics->clear(kColorWhite);
@@ -319,7 +315,7 @@ static int update(void* userdata)
 	if (released & kButtonA) {
 		total = 0;
 		runs = 0;
-		_mode = (_mode + 1) % 4;
+		_mode = (_mode + 1) % 3;
 	}
 	if (pressed & kButtonUp) {
 		cam_dist += 0.1f;
