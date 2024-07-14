@@ -655,7 +655,7 @@ static void drawTextureFragment_fixed(uint8_t* row, int x1, int x2, int lu, int 
     // int dx = x2 - x1;
     if (x2 - x1 == 0) return;
 
-    // delta have a precision of 1/16
+    // using floats to keep precision
     const int du = __TOFIXED16((ru - lu) / dx);
     const int dv = __TOFIXED16((rv - lv) / dx);
     const int dw = __TOFIXED16((rw - lw) / dx);
@@ -730,34 +730,50 @@ static void drawTextureFragment_fixed(uint8_t* row, int x1, int x2, int lu, int 
 
         if (x <= x2) {
             // starting point (with additional precision)
+            // note: scaling factor must not overflow +-32768
             Fixed uv0 = {
-                .q0 = ((256 * lu) / lw),
-                .q1 = ((256 * lv) / lw),
+                .q0 = ((64 * lu) / lw),
+                .q1 = ((64 * lv) / lw),
             };
+            const int uv0mask = tmask | tmask << 16;
+            const int du_strip = 8 * du, dv_strip = 8 * dv, dw_strip = 8 * dw;
             while (x <= x2)
             {
                 // next
-                lu += 8 * du;
-                lv += 8 * dv;
-                lw += 8 * dw;
+                lu += du_strip;
+                lv += dv_strip;
+                lw += dw_strip;
                 // end point (with additional precision)
                 Fixed uv1 = {
-                    .q0 = ((256 * lu) / lw),
-                    .q1 = ((256 * lv) / lw),
+                    .q0 = ((64 * lu) / lw),
+                    .q1 = ((64 * lv) / lw),
                 };
                 // single instruction substract
                 const Fixed tmp = { .i32 = __SSUB16(uv1.i32, uv0.i32) };
+
+                // divide by step size (and keep sign!)
                 const Fixed dduv = {
                     .q0 = tmp.q0 >> 3,
                     .q1 = tmp.q1 >> 3
                 };
+                Fixed uv;
                 uint8_t src = 0;
-                for (int i = 0; i < 8; i++, uv0.i32 += dduv.i32) {
-                    const Fixed uv = { .i32 = (uv0.i32>>8) & 0x003f003f };
-                    // texture encoded as 1 pixel per byte
-                    src |= texture[uv.q0 + uv.q1 * tw] >> i;
-                    // src |= 0x80 >> i;
-                }
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                src += texture[uv.q0 + uv.q1 * tw] >> 0; uv0.i32 += dduv.i32;
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                src += texture[uv.q0 + uv.q1 * tw] >> 1; uv0.i32 += dduv.i32;
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                src += texture[uv.q0 + uv.q1 * tw] >> 2; uv0.i32 += dduv.i32;
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                src += texture[uv.q0 + uv.q1 * tw] >> 3; uv0.i32 += dduv.i32;
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                src += texture[uv.q0 + uv.q1 * tw] >> 4; uv0.i32 += dduv.i32;
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                src += texture[uv.q0 + uv.q1 * tw] >> 5; uv0.i32 += dduv.i32;
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                src += texture[uv.q0 + uv.q1 * tw] >> 6; uv0.i32 += dduv.i32;
+                uv.i32 = (uv0.i32 >> 6) & uv0mask;
+                src += texture[uv.q0 + uv.q1 * tw] >> 7;
 
                 *(p++) = src;
                 x += 8;

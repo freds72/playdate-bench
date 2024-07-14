@@ -348,12 +348,21 @@ static int update(void* userdata)
 
 	// model matrix
 	Mat4 mvv = {0};
-	Mat4 cube_m = {
+	float crank_angle = pd->system->getCrankAngle() / 16.0f;
+	const float cc = cosf(crank_angle), ss = sinf(crank_angle);
+	Mat4 cube_m = { 0 };
+	m_x_m((Mat4) {
 		1.f, 0.f, 0.f, 0.f,
-		0.f, 1.f, 0.f, 0.f,
-		0.f, 0.f, 1.f, 0.f,
-		-0.5f, -0.5f, -0.5f, 1.f
-	};
+			0.f, cc, -ss, 0.f,
+			0.f, ss, cc, 0.f,
+			0.f, 0.f,0.f, 1.f
+	}, (Mat4) {
+		1.f, 0.f, 0.f, 0.f,
+			0.f, 1.0f, 0.f, 0.f,
+			0.f, 0.f, 1.0f, 0.f,
+			-0.5f, -0.5f, -0.5f, 1.f
+		}, cube_m);
+	
 	m_x_m(m, cube_m, mvv);
 
 	// cam pos in 3d model space
